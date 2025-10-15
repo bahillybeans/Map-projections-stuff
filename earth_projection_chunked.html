@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Interactive Earth Projection Viewer — Chunked Optimized</title>
+<style>
+  body { font-family: system-ui, sans-serif; display:flex; flex-direction:column; align-items:center; background:#fafafa; margin:0; padding:16px; gap:10px }
+  #controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:center; }
+  input[type=text] { padding:4px; }
+  canvas { border:1px solid #888; cursor:grab; background:#fff; }
+</style>
+</head>
+<body>
+<h2>Interactive Earth Projection Viewer (Chunked Optimized)</h2>
+<div id="controls">
+  <label>x(a,b)=<input id="fx" type="text" value="a"></label>
+  <label>y(a,b)=<input id="fy" type="text" value="b"></label>
+  <label><input id="tileX" type="checkbox" checked> Tile x</label>
+  <label><input id="tileY" type="checkbox" checked> Tile y</label>
+  <button id="draw">Redraw</button>
+  <button id="render">Render</button>
+  <div id="status">Loading image...</div>
+</div>
+<canvas id="map" width="800" height="400"></canvas>
+<script>
+function sin(x) {
+	return Math.sin(x);
+}
+
+function cos(x) {
+	return Math.cos(x);
+}
+
+function tan(x) {
+	return Math.tan(x);
+}
+
+function csc(x) {
+	return 1 / sin(x);
+}
+
+function sec(x) {
+	return 1 / cos(x);
+}
+
+function cot(x) {
+	return 1 / tan(x);
+}
+
+function ln(x) {
+	return Math.log(x);
+}
+
+function sqrt(x) {
+	return Math.sqrt(x);
+}
+const pi = Math.PI;
+	
+
+const canvas=document.getElementById('map');
+const ctx=canvas.getContext('2d');
+const fxInput=document.getElementById('fx');
+const fyInput=document.getElementById('fy');
+const tileInputX=document.getElementById('tileX');
+const tileInputY=document.getElementById('tileY');
+const drawBtn=document.getElementById('draw');
+const renderBtn = document.getElementById('render');
+const status=document.getElementById('status');
+
+let img=new Image();
+img.crossOrigin='anonymous';
+img.src='http://lh3.googleusercontent.com/pw/AP1GczP3fCdFKZqYEiEA5YiSgWxP4Fjq30TBUEZYmK2cjMnjL9NRnTMH4OYxy9flkYIlMj-P6lXERj970ve3CQNNbwLs7O_hd5Dj4m19RezeKU0IH6LMuzI=w2400'; //'https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/Equirectangular_projection_SW.jpg/1024px-Equirectangular_projection_SW.jpg';
+let imageLoaded=false;
+img.onload=()=>{imageLoaded=true;status.textContent='Image loaded.';initializeChunks();};
+img.onerror=()=>{status.textContent='Failed to load image.';};
+
+let panX=400,panY=200,zoom=1.5,targetZoom=1.5;
+let dragging=false,lastX=0,lastY=0;
+const baseChunkSize=32;
+let chunks=[];
+let tempCanvas=document.createElement('canvas');
+let tempCtx=tempCanvas.getContext('2d');
+tempCanvas.width=1024; tempCanvas.height=512;
+let srcData;
+let animating=false;
+
+function initializeChunks(){
+  chunks=[];
+  const W=tempCanvas.width,H=tempCanvas.height;
+  for(let y=0;y<H;y+=baseChunkSize){
+    for(let x=0;x<W;x+=baseChunkSize){
+      chunks.push({x:x,y:y,rendered:false});
+    }
+  }
+  tempCtx.drawImage(img,0,0,tempCanvas.width,tempCanvas.height);
+  srcData=tempCtx.getImageData(0,0,tempCanvas.width,tempCanvas.height).data;
+  renderAllChunks();
+}
+
+canvas.addEventListener('mousedown',e=>{dragging=true;canvas.style.cursor='grabbing';lastX=e.clientX;lastY=e.clientY;});
+canvas.addEventListener('mouseup',()=>{dragging=false;canvas.style.cursor='grab';});
+canvas.addEventListener('mouseleave',()=>{dragging=false;canvas.style.cursor='grab';});
+canvas.addEventListener('mousemove',e=>{
+  if(dragging){
+    const dx = e.clientX - lastX;
+    const dy = e.clientY - lastY;
+    panX += dx;
+    panY += dy;
+    lastX = e.clientX; lastY = e.clientY;
+    drawProjection();
+  }
+});
+canvas.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const worldX = (mx - panX) / zoom;
+  const worldY = (my - panY) / zoom;
+  const zoomFactor = Math.exp(-e.deltaY*0.001);
+  targetZoom = Math.min(Math.max(zoom * zoomFactor, 0.2), 10);
+  zoom = targetZoom;
+  panX = mx - worldX * zoom;
+  panY = my - worldY * zoom;
+  drawProjection();
+});
+
+drawBtn.addEventListener('click',()=>{
+  drawProjection();
+});
+renderBtn.addEventListener('click',()=>{
+  finalRender();
+});
+
+function safeFunction(str){try{return new Function('a','b','return ('+str+')');}catch(e){return null;}}
+
+function bilinearSample(srcData,w,h,u,v,tileX,tileY, isFinal){
+  if(tileX){u=(u%w+w)%w;}else{if(u<0||u>=w)return isFinal ? null : [255, 255, 255, 255];}
+  if(tileY){v=(v%h+h)%h;}else{if(v<0||v>=h)return isFinal ? null : [255, 255, 255, 255];}
+  const uu=Math.floor(u);const vv=Math.floor(v);
+  const du=u-uu;const dv=v-vv;
+  const uu1=tileX?((uu+1)%w):Math.min(uu+1,w-1);
+  const vv1=tileY?((vv+1)%h):Math.min(vv+1,h-1);
+  const i00=(vv*w+uu)*4;const i10=(vv*w+uu1)*4;const i01=(vv1*w+uu)*4;const i11=(vv1*w+uu1)*4;
+  const out=[0,0,0,255];
+  for(let c=0;c<3;c++){
+    const c00=srcData[i00+c],c10=srcData[i10+c],c01=srcData[i01+c],c11=srcData[i11+c];
+    out[c]=c00*(1-du)*(1-dv)+c10*du*(1-dv)+c01*(1-du)*dv+c11*du*dv;
+  }
+  return out;
+}
+
+function drawProjection(){
+  if(!imageLoaded){alert('Image not yet loaded.');return;}
+  const fx=safeFunction(fxInput.value.trim());
+  const fy=safeFunction(fyInput.value.trim());
+  if(!fx||!fy){alert('Invalid x(a,b) or y(a,b).');return;}
+
+  const W=canvas.width,H=canvas.height;
+  //const zoom=parseFloat(zoomInput.value);
+  canvas.width=W;canvas.height=H;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
+
+  const scale=(H/(2*Math.PI))*zoom;
+  const x0=W/2,y0=H/2;
+
+  const tempCanvas=document.createElement('canvas');
+  tempCanvas.width=img.width;tempCanvas.height=img.height;
+  const tctx=tempCanvas.getContext('2d');
+  tctx.drawImage(img,0,0);
+  const src=tctx.getImageData(0,0,img.width,img.height);
+  const srcData=src.data;
+  const output=ctx.createImageData(W,H);
+  const dst=output.data;
+  const lonMin=-Math.PI,lonMax=Math.PI,latMin=-Math.PI/2,latMax=Math.PI/2;
+
+  for(let y=0;y<H;y++){
+    for(let x=0;x<W;x++){
+      const a_guess=(x-x0 - (panX - x0))/scale;
+      const b_guess=-(y-y0 - (panY - y0))/scale;
+      let a=a_guess,b=b_guess;
+      try{
+        for(let iter=0;iter<2;iter++){
+          const px=fx(a,b);const py=fy(a,b);
+          const errx=px-a_guess;const erry=py-b_guess;
+          a-=errx*0.5;b-=erry*0.5;
+        }
+      }catch(e){continue;}
+      if(!isFinite(a)||!isFinite(b))continue;
+      const u=((a-lonMin)/(lonMax-lonMin))*img.width;
+      const v=((latMax-b)/(latMax-latMin))*img.height;
+      const c=bilinearSample(srcData,img.width,img.height,u,v,tileInputX.checked,tileInputY.checked, !1);
+      const i=(y*W+x)*4;
+      dst[i]=c[0];dst[i+1]=c[1];dst[i+2]=c[2];dst[i+3]=255;
+    }
+  }
+  ctx.putImageData(output,0,0);
+  status.textContent=`Rendered at ${zoom.toFixed(2)}x zoom`;
+}
+
+function finalRender(){
+  if(!imageLoaded){alert('Image not yet loaded.');return;}
+  const fx=safeFunction(fxInput.value.trim());
+  const fy=safeFunction(fyInput.value.trim());
+  if(!fx||!fy){alert('Invalid x(a,b) or y(a,b).');return;}
+
+  const W=canvas.width,H=canvas.height;
+  //const zoom=parseFloat(zoomInput.value);
+  canvas.width=W;canvas.height=H;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
+
+  const scale=(H/(2*Math.PI))*zoom;
+  const x0=W/2,y0=H/2;
+
+  const tempCanvas=document.createElement('canvas');
+  tempCanvas.width=img.width;tempCanvas.height=img.height;
+  const tctx=tempCanvas.getContext('2d');
+  tctx.drawImage(img,0,0);
+  const src=tctx.getImageData(0,0,img.width,img.height);
+  const srcData=src.data;
+  const output=ctx.createImageData(W,H);
+  const dst=output.data;
+  const lonMin=-Math.PI,lonMax=Math.PI,latMin=-Math.PI/2,latMax=Math.PI/2;
+
+  for(let y=0;y<H;y++){
+    for(let x=0;x<W;x++){
+      let a_guess=(x-x0 - (panX - x0))/scale;
+      let b_guess=-(y-y0 - (panY - y0))/scale;
+      let a=a_guess,b=b_guess;
+	  let a1=a,b1=b;
+      try{
+        for(let iter=0;iter<100;iter++){
+          const px=fx(a,b);const py=fy(a,b);
+          const errx=px-a_guess;const erry=py-b_guess;
+          a-=errx*0.08;b-=erry*0.08;
+        }
+		for(let iter=0;iter<100;iter++){
+          const px=fx(a1,b1);const py=fy(a1,b1);
+          const errx=px-a_guess;const erry=py-b_guess;
+          a1+=errx*0.08;b1+=erry*0.08;
+        }
+      }catch(e){continue;}
+      if(!isFinite(a)||!isFinite(b))continue;
+      let u=((a-lonMin)/(lonMax-lonMin))*img.width;
+	  let u1=((a1-lonMin)/(lonMax-lonMin))*img.width;
+      let v=((latMax-b)/(latMax-latMin))*img.height;
+	  let v1=((latMax-b1)/(latMax-latMin))*img.height;
+      let c=bilinearSample(srcData,img.width,img.height,u,v,tileInputX.checked,tileInputY.checked, !0);
+	  let c1=bilinearSample(srcData,img.width,img.height,u1,v1,tileInputX.checked,tileInputY.checked, !0);
+	  if (!c && c1) {
+		c = c1;
+	  }
+	  if (!c && !c1) {
+		c = [255, 255, 255, 255];
+	  }
+	  const i=(y*W+x)*4;
+      dst[i]=c[0];dst[i+1]=c[1];dst[i+2]=c[2];dst[i+3]=255;
+    }
+  }
+  ctx.putImageData(output,0,0);
+  status.textContent=`Rendered at ${zoom.toFixed(2)}x zoom`;
+}
+
+
+function renderAllChunks(){drawProjection();}
+</script>
+</body>
+</html>
