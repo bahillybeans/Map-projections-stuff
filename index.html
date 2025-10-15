@@ -186,22 +186,36 @@ function drawProjection(){
 
   for(let y=0;y<H;y++){
     for(let x=0;x<W;x++){
-      const a_guess=(x-x0 - (panX - x0))/scale;
-      const b_guess=-(y-y0 - (panY - y0))/scale;
-      let a=a_guess,b=b_guess;
-      try{
-        for(let iter=0;iter<2;iter++){
-          const px=fx(a,b);const py=fy(a,b);
-          const errx=px-a_guess;const erry=py-b_guess;
-          a-=errx*0.5;b-=erry*0.5;
-        }
-      }catch(e){continue;}
-      if(!isFinite(a)||!isFinite(b))continue;
-      const u=((a-lonMin)/(lonMax-lonMin))*img.width;
-      const v=((latMax-b)/(latMax-latMin))*img.height;
-      const c=bilinearSample(srcData,img.width,img.height,u,v,tileInputX.checked,tileInputY.checked, !1);
-      const i=(y*W+x)*4;
-      dst[i]=c[0];dst[i+1]=c[1];dst[i+2]=c[2];dst[i+3]=255;
+	  if(inverseCheckbox.checked) {
+		const screenX = (x-x0 - (panX - x0))/scale;
+		const screenY = -(y-y0 - (panY - y0))/scale;
+		let a = fx(screenX, screenY);
+		let b = fy(screenX, screenY);
+		
+		if(!isFinite(a)||!isFinite(b))continue;
+        const u=((a-lonMin)/(lonMax-lonMin))*img.width;
+        const v=((latMax-b)/(latMax-latMin))*img.height;
+        const c=bilinearSample(srcData,img.width,img.height,u,v,tileInputX.checked,tileInputY.checked, !1);
+        const i=(y*W+x)*4;
+        dst[i]=c[0];dst[i+1]=c[1];dst[i+2]=c[2];dst[i+3]=255;
+	  } else {
+      	const a_guess=(x-x0 - (panX - x0))/scale;
+      	const b_guess=-(y-y0 - (panY - y0))/scale;
+      	let a=a_guess,b=b_guess;
+      	try{
+          for(let iter=0;iter<2;iter++){
+            const px=fx(a,b);const py=fy(a,b);
+            const errx=px-a_guess;const erry=py-b_guess;
+            a-=errx*0.5;b-=erry*0.5;
+          }
+        }catch(e){continue;}
+        if(!isFinite(a)||!isFinite(b))continue;
+        const u=((a-lonMin)/(lonMax-lonMin))*img.width;
+        const v=((latMax-b)/(latMax-latMin))*img.height;
+        const c=bilinearSample(srcData,img.width,img.height,u,v,tileInputX.checked,tileInputY.checked, !1);
+        const i=(y*W+x)*4;
+        dst[i]=c[0];dst[i+1]=c[1];dst[i+2]=c[2];dst[i+3]=255;
+	  }
     }
   }
   ctx.putImageData(output,0,0);
