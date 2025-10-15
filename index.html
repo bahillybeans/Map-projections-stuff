@@ -13,10 +13,11 @@
 <body>
 <h2>Interactive Earth Projection Viewer</h2>
 <div id="controls">
-  <label>x(a,b)=<input id="fx" type="text" value="a"></label>
-  <label>y(a,b)=<input id="fy" type="text" value="b"></label>
+  <label id="functionX">x(a,b)=<input id="fx" type="text" value="a"></label>
+  <label id="functionY">y(a,b)=<input id="fy" type="text" value="b"></label>
   <label><input id="tileX" type="checkbox" checked> Tile x</label>
   <label><input id="tileY" type="checkbox" checked> Tile y</label>
+  <label><input id="isInverse" type="checkbox"> Input Inverse</label>
   <button id="draw">Redraw</button>
   <button id="render">Render</button>
   <div id="status">Loading image...</div>
@@ -80,6 +81,9 @@ const tileInputX=document.getElementById('tileX');
 const tileInputY=document.getElementById('tileY');
 const drawBtn=document.getElementById('draw');
 const renderBtn = document.getElementById('render');
+const inverseCheckbox = document.getElementById('isInverse');
+const functionXLabel = document.getElementById('functionX');
+const functionYLabel = document.getElementById('functionY');
 const status=document.getElementById('status');
 
 let img=new Image();
@@ -130,6 +134,11 @@ drawBtn.addEventListener('click',()=>{
 });
 renderBtn.addEventListener('click',()=>{
   finalRender();
+});
+
+inverseCheckbox.addEventListener('change', () => {
+	if (inverseCheckbox.checked) {functionXLabel.innerHTML = 'a(x, y)='; functionYLabel.innerHTML = 'b(x, y)=';}
+	else {functionXLabel.innerHTML = 'x(a, b)='; functionYLabel.innerHTML = 'y(a, b)=';}
 });
 
 function safeFunction(str){try{return new Function('a','b','return ('+str+')');}catch(e){return null;}}
