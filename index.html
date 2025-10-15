@@ -137,8 +137,8 @@ renderBtn.addEventListener('click',()=>{
 });
 
 inverseCheckbox.addEventListener('change', () => {
-	if (inverseCheckbox.checked) {functionXLabel.innerHTML = 'a(x, y)='; functionYLabel.innerHTML = 'b(x, y)=';}
-	else {functionXLabel.innerHTML = 'x(a, b)='; functionYLabel.innerHTML = 'y(a, b)=';}
+	if (inverseCheckbox.checked) {functionXLabel.innerHTML = 'a(x, y)=<input id="fx" type="text" value="x">'; functionYLabel.innerHTML = 'b(x, y)=<input id="fy" type="text" value="y">';}
+	else {functionXLabel.innerHTML = 'x(a, b)=<input id="fx" type="text" value="a">'; functionYLabel.innerHTML = 'y(a, b)=<input id="fy" type="text" value="b">';}
 });
 
 function safeFunction(str){try{return new Function('a','b','return ('+str+')');}catch(e){return null;}}
