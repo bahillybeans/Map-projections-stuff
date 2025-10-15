@@ -69,7 +69,7 @@ const status=document.getElementById('status');
 
 let img=new Image();
 img.crossOrigin='anonymous';
-img.src='http://lh3.googleusercontent.com/pw/AP1GczP3fCdFKZqYEiEA5YiSgWxP4Fjq30TBUEZYmK2cjMnjL9NRnTMH4OYxy9flkYIlMj-P6lXERj970ve3CQNNbwLs7O_hd5Dj4m19RezeKU0IH6LMuzI=w2400'; //'https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/Equirectangular_projection_SW.jpg/1024px-Equirectangular_projection_SW.jpg';
+img.src='world_map.jpg'; //'https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/Equirectangular_projection_SW.jpg/1024px-Equirectangular_projection_SW.jpg';
 let imageLoaded=false;
 img.onload=()=>{imageLoaded=true;status.textContent='Image loaded.';initializeChunks();};
 img.onerror=()=>{status.textContent='Failed to load image.';};
